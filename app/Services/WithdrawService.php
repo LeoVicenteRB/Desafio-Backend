@@ -134,17 +134,38 @@ class WithdrawService
      */
     public function processWebhook(array $payload, string $source): void
     {
+        if (empty($payload) || !is_array($payload)) {
+            Log::error('WithdrawService processWebhook: Invalid payload', [
+                'source' => $source,
+                'payload' => $payload,
+            ]);
+            return;
+        }
+
         $adapter = $this->subadquirerService->resolveAdapter($source);
 
         if (!$adapter) {
-            Log::error('Unknown subadquirer for webhook', ['source' => $source]);
+            Log::error('WithdrawService processWebhook: Unknown subadquirer', [
+                'source' => $source,
+            ]);
             return;
         }
 
         $dto = $adapter->parseWithdrawWebhook($payload);
 
         if (!$dto) {
-            Log::warning('Could not parse withdraw webhook', ['source' => $source, 'payload' => $payload]);
+            Log::warning('WithdrawService processWebhook: Could not parse webhook', [
+                'source' => $source,
+                'payload' => $payload,
+            ]);
+            return;
+        }
+
+        if (empty($dto->externalId)) {
+            Log::error('WithdrawService processWebhook: Missing external ID in DTO', [
+                'source' => $source,
+                'dto' => $dto,
+            ]);
             return;
         }
 
@@ -155,14 +176,13 @@ class WithdrawService
                 ->first();
 
             if (!$withdraw) {
-                Log::warning('Withdraw not found for webhook', [
+                Log::warning('WithdrawService processWebhook: Withdraw not found', [
                     'external_id' => $dto->externalId,
                     'source' => $source,
                 ]);
                 return;
             }
 
-            // Update withdraw status
             $withdraw->update([
                 'status' => $dto->getInternalStatus(),
                 'transaction_id' => $dto->transactionId ?? $withdraw->transaction_id,
@@ -171,7 +191,6 @@ class WithdrawService
                 'metadata' => array_merge($withdraw->metadata ?? [], $dto->metadata ?? []),
             ]);
 
-            // Dispatch event if completed
             if ($withdraw->isCompleted()) {
                 event(new \App\Events\WithdrawCompleted($withdraw));
             }

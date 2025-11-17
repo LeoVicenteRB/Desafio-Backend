@@ -14,18 +14,15 @@ class SubadquirerServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Bind SubadqA adapter
         $this->app->singleton('subadquirer.SubadqA', function ($app) {
             return new SubadqAAdapter(
                 baseUrl: config('services.subadq_a.base_url', env('SUBADQA_BASE_URL', 'https://subadqa.mock')),
                 apiKey: config('services.subadq_a.api_key'),
                 apiSecret: config('services.subadq_a.api_secret'),
-                timeout: config('services.subadq_a.timeout', 30),
-                useCents: config('services.subadq_a.use_cents', false)
+                timeout: config('services.subadq_a.timeout', 30)
             );
         });
 
-        // Bind SubadqB adapter
         $this->app->singleton('subadquirer.SubadqB', function ($app) {
             return new SubadqBAdapter(
                 baseUrl: config('services.subadq_b.base_url', env('SUBADQB_BASE_URL', 'https://subadqb.mock')),

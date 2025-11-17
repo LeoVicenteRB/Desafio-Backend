@@ -17,11 +17,6 @@ class ProcessWebhookJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    /**
-     * Create a new job instance.
-     *
-     * @param array<string, mixed> $payload
-     */
     public function __construct(
         private readonly array $payload,
         private readonly string $source,
@@ -29,16 +24,28 @@ class ProcessWebhookJob implements ShouldQueue
     ) {
     }
 
-    /**
-     * Execute the job.
-     */
     public function handle(PixService $pixService, WithdrawService $withdrawService): void
     {
-        // Get external ID for idempotency check
+        if (!in_array($this->type, ['pix', 'withdraw'], true)) {
+            Log::error('ProcessWebhookJob: Invalid webhook type', [
+                'type' => $this->type,
+                'source' => $this->source,
+            ]);
+            return;
+        }
+
+        if (empty($this->payload) || !is_array($this->payload)) {
+            Log::error('ProcessWebhookJob: Invalid payload', [
+                'source' => $this->source,
+                'type' => $this->type,
+            ]);
+            return;
+        }
+
         $externalId = $this->getExternalId();
 
-        if (!$externalId) {
-            Log::warning('Webhook payload missing external ID', [
+        if (!$externalId || !is_string($externalId)) {
+            Log::warning('ProcessWebhookJob: Missing or invalid external ID', [
                 'source' => $this->source,
                 'type' => $this->type,
                 'payload' => $this->payload,
@@ -46,7 +53,6 @@ class ProcessWebhookJob implements ShouldQueue
             return;
         }
 
-        // Idempotency check - use firstOrCreate with lock
         $webhookLog = DB::transaction(function () use ($externalId) {
             return WebhookLog::firstOrCreate(
                 [
@@ -61,9 +67,8 @@ class ProcessWebhookJob implements ShouldQueue
             );
         });
 
-        // If already processed, skip
         if ($webhookLog->status === 'PROCESSED') {
-            Log::info('Webhook already processed, skipping', [
+            Log::info('ProcessWebhookJob: Webhook already processed', [
                 'source' => $this->source,
                 'external_id' => $externalId,
                 'type' => $this->type,
@@ -72,29 +77,23 @@ class ProcessWebhookJob implements ShouldQueue
         }
 
         try {
-            // Lock the webhook log for update
             $webhookLog = WebhookLog::where('id', $webhookLog->id)
                 ->lockForUpdate()
                 ->first();
 
-            // Double-check after lock
             if ($webhookLog->status === 'PROCESSED') {
                 return;
             }
 
-            // Process webhook based on type
             if ($this->type === 'pix') {
                 $pixService->processWebhook($this->payload, $this->source);
-            } elseif ($this->type === 'withdraw') {
-                $withdrawService->processWebhook($this->payload, $this->source);
             } else {
-                throw new \InvalidArgumentException("Unknown webhook type: {$this->type}");
+                $withdrawService->processWebhook($this->payload, $this->source);
             }
 
-            // Mark as processed
             $webhookLog->markAsProcessed();
 
-            Log::info('Webhook processed successfully', [
+            Log::info('ProcessWebhookJob: Webhook processed successfully', [
                 'source' => $this->source,
                 'external_id' => $externalId,
                 'type' => $this->type,
@@ -102,39 +101,36 @@ class ProcessWebhookJob implements ShouldQueue
         } catch (\Exception $e) {
             $webhookLog->markAsFailed($e->getMessage());
 
-            Log::error('Webhook processing failed', [
+            Log::error('ProcessWebhookJob: Webhook processing failed', [
                 'source' => $this->source,
                 'external_id' => $externalId,
                 'type' => $this->type,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             throw $e;
         }
     }
 
-    /**
-     * Get external ID from payload.
-     */
     private function getExternalId(): ?string
     {
-        // SubadqA format
-        if (isset($this->payload['pix_id'])) {
+        if (isset($this->payload['pix_id']) && is_string($this->payload['pix_id'])) {
             return $this->payload['pix_id'];
         }
-        if (isset($this->payload['withdraw_id'])) {
+
+        if (isset($this->payload['withdraw_id']) && is_string($this->payload['withdraw_id'])) {
             return $this->payload['withdraw_id'];
         }
-        if (isset($this->payload['transaction_id'])) {
+
+        if (isset($this->payload['transaction_id']) && is_string($this->payload['transaction_id'])) {
             return $this->payload['transaction_id'];
         }
 
-        // SubadqB format
-        if (isset($this->payload['data']['id'])) {
+        if (isset($this->payload['data']['id']) && is_string($this->payload['data']['id'])) {
             return $this->payload['data']['id'];
         }
 
         return null;
     }
 }
-

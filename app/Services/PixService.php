@@ -130,17 +130,38 @@ class PixService
      */
     public function processWebhook(array $payload, string $source): void
     {
+        if (empty($payload) || !is_array($payload)) {
+            Log::error('PixService processWebhook: Invalid payload', [
+                'source' => $source,
+                'payload' => $payload,
+            ]);
+            return;
+        }
+
         $adapter = $this->subadquirerService->resolveAdapter($source);
 
         if (!$adapter) {
-            Log::error('Unknown subadquirer for webhook', ['source' => $source]);
+            Log::error('PixService processWebhook: Unknown subadquirer', [
+                'source' => $source,
+            ]);
             return;
         }
 
         $dto = $adapter->parsePixWebhook($payload);
 
         if (!$dto) {
-            Log::warning('Could not parse PIX webhook', ['source' => $source, 'payload' => $payload]);
+            Log::warning('PixService processWebhook: Could not parse webhook', [
+                'source' => $source,
+                'payload' => $payload,
+            ]);
+            return;
+        }
+
+        if (empty($dto->externalId)) {
+            Log::error('PixService processWebhook: Missing external ID in DTO', [
+                'source' => $source,
+                'dto' => $dto,
+            ]);
             return;
         }
 
@@ -151,14 +172,13 @@ class PixService
                 ->first();
 
             if (!$pix) {
-                Log::warning('PIX not found for webhook', [
+                Log::warning('PixService processWebhook: PIX not found', [
                     'external_id' => $dto->externalId,
                     'source' => $source,
                 ]);
                 return;
             }
 
-            // Update PIX status
             $pix->update([
                 'status' => $dto->getInternalStatus(),
                 'payer_name' => $dto->payerName ?? $pix->payer_name,
@@ -167,7 +187,6 @@ class PixService
                 'metadata' => array_merge($pix->metadata ?? [], $dto->metadata ?? []),
             ]);
 
-            // Dispatch event if confirmed
             if ($pix->isConfirmed()) {
                 event(new \App\Events\PixConfirmed($pix));
             }
