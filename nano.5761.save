@@ -1,0 +1,6 @@
+ardo\.cursor-server\bin\8e4da76ad196925accaa169efcae28c45454cce0/out/vs/workbench/contrib/terminal/common/scripts/shellIntegration-bash.sh"
+
+mkdir -p /var/www/html/Desafio-Backend/bootstrap/cache
+mkdir -p /var/www/html/Desafio-Backend/resources/views
+cd /var/www/html/Desafio-Backend && php artisan tinker --execute="echo json_encode(['merchant_id' => 'm123', 'amount' => 12345, 'currency' => 'BRL', 'order_id' => 'order_001', 'payer' => ['name' => 'Fulano', 'cpf_cnpj' => '00000000000'], 'expires_in' => 3600], JSON_UNESCAPED_SLASHES);"
+

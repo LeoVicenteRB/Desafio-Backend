@@ -80,7 +80,10 @@ class SubadqAAdapter implements SubadquirerInterface
                 'payload' => $requestPayload,
             ]);
 
-            $headers = ['Content-Type' => 'application/json'];
+            $headers = [
+                'Content-Type' => 'application/json',
+                'x-mock-response-name' => 'SUCESSO_PIX',
+            ];
 
             if ($this->apiKey) {
                 $headers['X-API-Key'] = $this->apiKey;
@@ -184,7 +187,10 @@ class SubadqAAdapter implements SubadquirerInterface
                 'payload' => $requestPayload,
             ]);
 
-            $headers = ['Content-Type' => 'application/json'];
+            $headers = [
+                'Content-Type' => 'application/json',
+                'x-mock-response-name' => 'SUCESSO_WD',
+            ];
 
             if ($this->apiKey) {
                 $headers['X-API-Key'] = $this->apiKey;
